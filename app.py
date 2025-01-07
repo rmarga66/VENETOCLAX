@@ -1,5 +1,12 @@
 import streamlit as st
 import pandas as pd
+from fpdf import FPDF
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import os
 
 # Titre de l'application
 st.title("Surveillance des Effets Secondaires du Venetoclax")
@@ -11,18 +18,6 @@ st.markdown(
     Veuillez entrer les résultats des paramètres cliniques et biologiques pour chaque jour.
     """
 )
-
-# Initialisation des seuils critiques
-seuils = {
-    "Température (°C)": [36.0, 38.0],
-    "Tension artérielle systolique": [90, 140],
-    "Tension artérielle diastolique": [60, 90],
-    "Potassium (K+)": [3.5, 5.0],
-    "Calcium (Ca++)": [2.2, 2.6],
-    "Phosphore (P)": [0.8, 1.5],
-    "Créatinine": [50, 110],  # Valeurs en µmol/L
-    "Diurèse": [800, 2000]  # Valeurs en mL/24h
-}
 
 # Collecte des données utilisateur
 st.sidebar.header("Entrée des paramètres")
@@ -56,27 +51,86 @@ if "surveillance_data" in st.session_state:
     st.subheader("Historique des données enregistrées")
     st.dataframe(st.session_state["surveillance_data"])
 
-# Analyse des données
-if "surveillance_data" in st.session_state:
-    st.subheader("Analyse des effets secondaires")
-    df = st.session_state["surveillance_data"]
+# Fonction pour générer un PDF
+def generate_pdf(dataframe):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Rapport de Surveillance", ln=True, align='C')
+    pdf.ln(10)
 
-    def detect_anomalies(row):
-        anomalies = []
-        for param, (min_val, max_val) in seuils.items():
-            # Vérifier que la colonne existe dans le DataFrame
-            if param in row:
-                if row[param] < min_val or row[param] > max_val:
-                    anomalies.append(param)
-        return anomalies
+    for i, row in dataframe.iterrows():
+        pdf.cell(0, 10, txt=f"Jour {row['Jour']} :", ln=True)
+        for col in dataframe.columns:
+            if col != "Jour":
+                pdf.cell(0, 10, txt=f"  {col}: {row[col]}", ln=True)
+        pdf.ln(5)
 
-    df["Anomalies"] = df.apply(detect_anomalies, axis=1)
-    st.write("Liste des anomalies détectées :")
-    st.dataframe(df[["Jour", "Anomalies"]])
+    file_path = "rapport_surveillance.pdf"
+    pdf.output(file_path)
+    return file_path
 
-    # Alertes si des anomalies critiques sont détectées
-    anomalies_detectees = df["Anomalies"].explode().dropna().unique()
-    if len(anomalies_detectees) > 0:
-        st.error(f"Paramètres critiques détectés : {', '.join(anomalies_detectees)}. Veuillez consulter un médecin.")
+# Bouton pour générer le PDF
+if st.button("Générer le PDF"):
+    if "surveillance_data" in st.session_state:
+        file_path = generate_pdf(st.session_state["surveillance_data"])
+        st.success(f"PDF généré avec succès : {file_path}")
+        with open(file_path, "rb") as pdf_file:
+            st.download_button(
+                label="Télécharger le PDF",
+                data=pdf_file,
+                file_name="rapport_surveillance.pdf",
+                mime="application/pdf"
+            )
     else:
-        st.success("Aucune anomalie critique détectée.")
+        st.error("Aucune donnée disponible pour générer le PDF.")
+
+# Fonction pour envoyer un email avec pièce jointe
+def send_email_with_attachment(recipient_email, subject, body, file_path):
+    sender_email = "your_email@example.com"  # Remplacez par votre email
+    sender_password = "your_password"  # Remplacez par votre mot de passe
+
+    # Création de l'email
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Ajout du fichier PDF
+    with open(file_path, "rb") as attachment:
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(file_path)}')
+        msg.attach(part)
+
+    # Envoi de l'email
+    try:
+        server = smtplib.SMTP('smtp.example.com', 587)  # Remplacez par votre serveur SMTP
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        return False, str(e)
+
+# Bouton pour envoyer le PDF par email
+recipient_email = st.text_input("Email du destinataire")
+if st.button("Envoyer par email"):
+    if "surveillance_data" in st.session_state:
+        file_path = generate_pdf(st.session_state["surveillance_data"])
+        success, error_message = send_email_with_attachment(
+            recipient_email,
+            "Rapport de Surveillance",
+            "Veuillez trouver ci-joint le rapport de surveillance.",
+            file_path
+        )
+        if success:
+            st.success("Email envoyé avec succès !")
+        else:
+            st.error(f"Erreur lors de l'envoi de l'email : {error_message}")
+    else:
+        st.error("Aucune donnée disponible pour envoyer le PDF.")
