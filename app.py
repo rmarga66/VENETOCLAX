@@ -80,14 +80,13 @@ if st.button("Générer le PDF"):
         st.error("Aucune donnée disponible pour générer le PDF.")
 
 # Bouton pour ouvrir l'application de messagerie avec pièce jointe
-recipient_email = st.text_input("Email du destinataire")
 if st.button("Envoyer par email"):
     if "surveillance_data" in st.session_state:
         file_path = generate_pdf(st.session_state["surveillance_data"])
         subject = "Rapport de Surveillance"
         body = "Bonjour,\n\nCi-joint les surveillance du patient : ______ \nBonne réception."
 
-        mailto_link = f"mailto:{recipient_email}?subject={subject}&body={body}"
-        st.markdown(f"[Cliquez ici pour envoyer l'email avec votre client mail](mailto:{recipient_email}?subject={subject}&body={body})")
+        mailto_link = f"mailto:?subject={subject}&body={body}"
+        st.markdown(f"[Cliquez ici pour envoyer l'email avec votre client mail]({mailto_link})")
     else:
         st.error("Aucune donnée disponible pour envoyer le PDF.")
