@@ -1,11 +1,6 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
 import os
 
 # Titre de l'application
@@ -14,8 +9,7 @@ st.title("Surveillance des Effets Secondaires du Venetoclax")
 # Description
 st.markdown(
     """
-    Cette application permet de surveiller les effets secondaires liés au traitement par Venetoclax.
-    Veuillez entrer les résultats des paramètres cliniques et biologiques pour chaque jour.
+    Cette application permet de surveiller les paramètres cliniques et biologiques pour générer un rapport.
     """
 )
 
@@ -85,52 +79,15 @@ if st.button("Générer le PDF"):
     else:
         st.error("Aucune donnée disponible pour générer le PDF.")
 
-# Fonction pour envoyer un email avec pièce jointe
-def send_email_with_attachment(recipient_email, subject, body, file_path):
-    sender_email = "your_email@example.com"  # Remplacez par votre email
-    sender_password = "your_password"  # Remplacez par votre mot de passe
-
-    # Création de l'email
-    msg = MIMEMultipart()
-    msg['From'] = sender_email
-    msg['To'] = recipient_email
-    msg['Subject'] = subject
-
-    msg.attach(MIMEText(body, 'plain'))
-
-    # Ajout du fichier PDF
-    with open(file_path, "rb") as attachment:
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(attachment.read())
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(file_path)}')
-        msg.attach(part)
-
-    # Envoi de l'email
-    try:
-        server = smtplib.SMTP('smtp.example.com', 587)  # Remplacez par votre serveur SMTP
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.send_message(msg)
-        server.quit()
-        return True
-    except Exception as e:
-        return False, str(e)
-
-# Bouton pour envoyer le PDF par email
+# Bouton pour ouvrir l'application de messagerie avec pièce jointe
 recipient_email = st.text_input("Email du destinataire")
 if st.button("Envoyer par email"):
     if "surveillance_data" in st.session_state:
         file_path = generate_pdf(st.session_state["surveillance_data"])
-        success, error_message = send_email_with_attachment(
-            recipient_email,
-            "Rapport de Surveillance",
-            "Veuillez trouver ci-joint le rapport de surveillance.",
-            file_path
-        )
-        if success:
-            st.success("Email envoyé avec succès !")
-        else:
-            st.error(f"Erreur lors de l'envoi de l'email : {error_message}")
+        subject = "Rapport de Surveillance"
+        body = "Bonjour,\n\nCi-joint les surveillance du patient : ______ \nBonne réception."
+
+        mailto_link = f"mailto:{recipient_email}?subject={subject}&body={body}"
+        st.markdown(f"[Cliquez ici pour envoyer l'email avec votre client mail](mailto:{recipient_email}?subject={subject}&body={body})")
     else:
         st.error("Aucune donnée disponible pour envoyer le PDF.")
